@@ -153,7 +153,34 @@ const soloQ = rankedData.find((e) => e.queueType === "RANKED_SOLO_5x5") || {};
 // ─── Claude prompt ───────────────────────────────────────────────────────────
 
 function buildPrompt(player) {
-  return `You are a Diamond+ League of Legends coach analyzing a real player's ranked stats. Give an honest, direct coaching report. Do NOT be generic — reference their specific numbers.
+  return You are a Challenger-level League of Legends coach writing a personal breakdown for one of your students. Write like a real coach talking directly to the player — honest, specific, and direct. No fluff. Reference their actual numbers throughout.
+
+PLAYER DATA:
+- Summoner: ${player.name} (${player.tier} ${player.rank}, ${player.lp} LP)
+- Season: ${player.wins}W ${player.losses}L (${player.winRate}% WR)
+- Last ${player.gamesAnalyzed} games: ${player.recentWins}W ${player.recentLosses}L
+- KDA: ${player.avgKda} | CS/min: ${player.avgCsPerMin} | Vision: ${player.avgVisionScore} | Kill Participation: ${player.avgKillParticipation}%
+- Champions: ${player.topChampions.map((c) => `${c.name} (${c.games}g, ${c.winRate}% WR)`).join(", ")}
+- Roles: ${player.roles.join(", ") || "Unknown"}
+
+Write the breakdown using these sections. Sound like a person, not a report generator:
+
+**OVERVIEW**
+2-3 sentences. What do their numbers actually say about their playstyle? Be blunt.
+
+**TOP 3 MISTAKES**
+For each one: name it plainly, explain what the stat reveals, and what it's costing them in games. Use their actual numbers. No generic advice.
+
+**CHAMPION POOL**
+Tell them what to keep, what to drop, and what to add — with a real reason for each.
+
+**ONE THING TO DRILL THIS WEEK**
+One specific habit. Make it concrete enough that they can do it their very next game.
+
+**WIN CONDITION FOR YOUR ELO**
+What does a ${player.tier} ${player.rank} player need to consistently do that they probably aren't? Be honest.
+
+Keep it under 600 words. Write like you're talking to them, not filing a report.
 
 PLAYER DATA:
 - Name: ${player.name}
