@@ -46,7 +46,7 @@ export default function App() {
     
 
     try {
-      const res = await fetch("/api/analyze", {
+      const res = await fetch("https://riftiq-production.up.railway.app/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ summonerName: summonerName.trim(), tagline: tagline.trim(), region }),
@@ -64,7 +64,7 @@ export default function App() {
 
   const handleCheckout = async () => {
     try {
-      const res = await fetch("/api/checkout", {
+      const res = await fetch("https://riftiq-production.up.railway.app/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ summonerName, region }),
