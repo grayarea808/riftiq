@@ -153,7 +153,7 @@ const soloQ = rankedData.find((e) => e.queueType === "RANKED_SOLO_5x5") || {};
 // ─── Claude prompt ───────────────────────────────────────────────────────────
 
 function buildPrompt(player) {
-  return You are a Challenger-level League of Legends coach writing a personal breakdown for one of your students. Write like a real coach talking directly to the player — honest, specific, and direct. No fluff. Reference their actual numbers throughout.
+  return `You are a Challenger-level League of Legends coach writing a personal breakdown for one of your students. Write like a real coach talking directly to the player — honest, specific, and direct. No fluff. Reference their actual numbers throughout.
 
 PLAYER DATA:
 - Summoner: ${player.name} (${player.tier} ${player.rank}, ${player.lp} LP)
@@ -169,50 +169,19 @@ Write the breakdown using these sections. Sound like a person, not a report gene
 2-3 sentences. What do their numbers actually say about their playstyle? Be blunt.
 
 **TOP 3 MISTAKES**
-For each one: name it plainly, explain what the stat reveals, and what it's costing them in games. Use their actual numbers. No generic advice.
+For each one: name it plainly, explain what the stat reveals, and what it costs them in games. Use their actual numbers. No generic advice.
 
 **CHAMPION POOL**
-Tell them what to keep, what to drop, and what to add — with a real reason for each.
+Tell them what to keep, what to drop, and what to add with a real reason for each.
 
 **ONE THING TO DRILL THIS WEEK**
 One specific habit. Make it concrete enough that they can do it their very next game.
 
 **WIN CONDITION FOR YOUR ELO**
-What does a ${player.tier} ${player.rank} player need to consistently do that they probably aren't? Be honest.
+What does a ${player.tier} ${player.rank} player need to consistently do that they probably are not? Be honest.
 
-Keep it under 600 words. Write like you're talking to them, not filing a report.
+Keep it under 600 words. Write like you are talking to them, not filing a report.`;
 
-PLAYER DATA:
-- Name: ${player.name}
-- Rank: ${player.tier} ${player.rank} (${player.lp} LP)
-- Season record: ${player.wins}W ${player.losses}L (${player.winRate}% WR)
-- Last ${player.gamesAnalyzed} games: ${player.recentWins}W ${player.recentLosses}L
-- Avg KDA: ${player.avgKda}
-- Avg CS/min: ${player.avgCsPerMin}
-- Avg Vision Score: ${player.avgVisionScore}
-- Avg Kill Participation: ${player.avgKillParticipation}%
-- Top champions: ${player.topChampions.map((c) => `${c.name} (${c.games}g, ${c.winRate}% WR)`).join(", ")}
-- Roles played: ${player.roles.join(", ") || "Unknown"}
-
-Write a coaching report in this EXACT structure (use these headings):
-
-**OVERVIEW**
-2-3 sentences summarizing what their stats reveal about their playstyle and current ceiling.
-
-**TOP 3 MISTAKES (based on their data)**
-For each mistake: name it, explain why the stat reveals it, and what it costs them in games. Be specific — reference their actual numbers.
-
-**CHAMPION POOL VERDICT**
-Analyze their champion pool. Tell them what to keep, what to drop, and what to add. Give a reason for each.
-
-**YOUR #1 DRILL THIS WEEK**
-One specific, concrete habit or routine they should drill every game this week. Make it actionable (e.g., "Track the enemy jungler's position every time you kill a camp").
-
-**WIN CONDITION FOR YOUR ELO**
-What does a ${player.tier} ${player.rank} player need to do consistently that they are likely not doing? Be honest and direct.
-
-Keep the full report under 600 words. Be direct and coaching-focused, not motivational. Reference their specific stats throughout.`;
-}
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
