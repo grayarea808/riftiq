@@ -10,10 +10,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// ─── Riot API helpers ────────────────────────────────────────────────────────
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder");
 
 const ROUTING = {
   na1: "americas", euw1: "europe", eun1: "europe", kr: "asia",
@@ -36,37 +34,30 @@ const riotFetch = async (url) => {
 async function getPlayerData(summonerName, tagline, region) {
   const routing = ROUTING[region] || "americas";
 
-  // 1. Get PUUID via Riot Account API
   const account = await riotFetch(
     `https://${routing}.api.riotgames.com/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(summonerName)}/${encodeURIComponent(tagline)}`
   );
   const puuid = account.puuid;
 
-  // 2. Get summoner info
   const summoner = await riotFetch(
     `https://${region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/${puuid}`
   );
 
-  // 3. Get ranked stats
   const rankedData = await riotFetch(
-  `https://${region}.api.riotgames.com/lol/league/v4/entries/by-puuid/${puuid}`
-);
-console.log("Summoner ID:", summoner.id);
-const soloQ = rankedData.find((e) => e.queueType === "RANKED_SOLO_5x5") || {};
+    `https://${region}.api.riotgames.com/lol/league/v4/entries/by-puuid/${puuid}`
+  );
+  const soloQ = rankedData.find((e) => e.queueType === "RANKED_SOLO_5x5") || {};
 
-  // 4. Get last 20 ranked match IDs
   const matchIds = await riotFetch(
     `https://${routing}.api.riotgames.com/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&count=10`
   );
 
-  // 5. Fetch match details in parallel (up to 20)
   const matches = await Promise.all(
-    matchIds.slice(0, 20).map((id) =>
+    matchIds.slice(0, 10).map((id) =>
       riotFetch(`https://${routing}.api.riotgames.com/lol/match/v5/matches/${id}`)
     )
   );
 
-  // 6. Process match data
   const playerStats = matches.map((match) => {
     const participant = match.info.participants.find((p) => p.puuid === puuid);
     if (!participant) return null;
@@ -88,20 +79,13 @@ const soloQ = rankedData.find((e) => e.queueType === "RANKED_SOLO_5x5") || {};
     };
   }).filter(Boolean);
 
-  // 7. Aggregate stats
   const wins = playerStats.filter((g) => g.win).length;
   const losses = playerStats.length - wins;
   const avgKda = playerStats.length
-    ? (
-        playerStats.reduce((sum, g) => sum + (g.kills + g.assists) / Math.max(1, g.deaths), 0) /
-        playerStats.length
-      ).toFixed(2)
+    ? (playerStats.reduce((sum, g) => sum + (g.kills + g.assists) / Math.max(1, g.deaths), 0) / playerStats.length).toFixed(2)
     : "0.00";
   const avgCsPerMin = playerStats.length
-    ? (
-        playerStats.reduce((sum, g) => sum + g.cs / Math.max(1, g.gameDuration), 0) /
-        playerStats.length
-      ).toFixed(1)
+    ? (playerStats.reduce((sum, g) => sum + g.cs / Math.max(1, g.gameDuration), 0) / playerStats.length).toFixed(1)
     : "0.0";
   const avgVision = playerStats.length
     ? (playerStats.reduce((sum, g) => sum + g.visionScore, 0) / playerStats.length).toFixed(1)
@@ -110,7 +94,6 @@ const soloQ = rankedData.find((e) => e.queueType === "RANKED_SOLO_5x5") || {};
     ? (playerStats.reduce((sum, g) => sum + g.killParticipation, 0) / playerStats.length).toFixed(1)
     : "0.0";
 
-  // 8. Top champions
   const champMap = {};
   playerStats.forEach((g) => {
     if (!champMap[g.champion]) champMap[g.champion] = { games: 0, wins: 0 };
@@ -150,18 +133,18 @@ const soloQ = rankedData.find((e) => e.queueType === "RANKED_SOLO_5x5") || {};
   };
 }
 
-// ─── Claude prompt ───────────────────────────────────────────────────────────
-
 function buildPrompt(player) {
-  return `You are a Challenger-level League of Legends coach writing a personal breakdown for one of your students. Write like a real coach talking directly to the player — honest, specific, and direct. No fluff. Reference their actual numbers throughout.
+  const champList = player.topChampions.map((c) => `${c.name} (${c.games}g, ${c.winRate}% WR)`).join(", ");
+  const roles = player.roles.join(", ") || "Unknown";
+  return `You are a Challenger-level League of Legends coach writing a personal breakdown for one of your students. Write like a real coach talking directly to the player - honest, specific, and direct. No fluff. Reference their actual numbers throughout.
 
 PLAYER DATA:
 - Summoner: ${player.name} (${player.tier} ${player.rank}, ${player.lp} LP)
 - Season: ${player.wins}W ${player.losses}L (${player.winRate}% WR)
 - Last ${player.gamesAnalyzed} games: ${player.recentWins}W ${player.recentLosses}L
 - KDA: ${player.avgKda} | CS/min: ${player.avgCsPerMin} | Vision: ${player.avgVisionScore} | Kill Participation: ${player.avgKillParticipation}%
-- Champions: ${player.topChampions.map((c) => `${c.name} (${c.games}g, ${c.winRate}% WR)`).join(", ")}
-- Roles: ${player.roles.join(", ") || "Unknown"}
+- Champions: ${champList}
+- Roles: ${roles}
 
 Write the breakdown using these sections. Sound like a person, not a report generator:
 
@@ -181,81 +164,60 @@ One specific habit. Make it concrete enough that they can do it their very next 
 What does a ${player.tier} ${player.rank} player need to consistently do that they probably are not? Be honest.
 
 Keep it under 600 words. Write like you are talking to them, not filing a report.`;
+}
 
-
-// ─── Routes ──────────────────────────────────────────────────────────────────
-
-// Main analysis endpoint
 app.post("/api/analyze", async (req, res) => {
   const { summonerName, tagline, region } = req.body;
-
   if (!summonerName || !tagline || !region) {
     return res.status(400).json({ error: "Missing summoner name, tagline, or region" });
   }
-
   try {
-    // Fetch player data from Riot
     const playerData = await getPlayerData(summonerName, tagline, region);
-
-    // Generate report via Claude
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 1024,
       messages: [{ role: "user", content: buildPrompt(playerData) }],
     });
-
     const fullReport = message.content[0].text;
-
-    // Split into preview (first section only) + full
-    const overviewMatch = fullReport.match(/\*\*OVERVIEW\*\*([\s\S]*?)(?=\*\*TOP 3)/);
+    const overviewMatch = fullReport.match(/\*\*OVERVIEW\*\*([\s\S]*?)(?=\*\*TOP 3|\*\*CHAMPION)/);
     const preview = overviewMatch
       ? `**OVERVIEW**${overviewMatch[1].trim()}`
       : fullReport.slice(0, 300) + "...";
-
-    res.json({
-      playerData,
-      report: { preview, fullReport },
-    });
+    res.json({ playerData, report: { preview, fullReport } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Stripe checkout
 app.post("/api/checkout", async (req, res) => {
   const { summonerName, region } = req.body;
-
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "RiftIQ Coaching Report",
-              description: `Full AI coaching report for ${summonerName} (${region.toUpperCase()})`,
-            },
-            unit_amount: 499, // $4.99
+      line_items: [{
+        price_data: {
+          currency: "usd",
+          product_data: {
+            name: "RankLab Coaching Report",
+            description: `Full coaching breakdown for ${summonerName}`,
           },
-          quantity: 1,
+          unit_amount: 499,
         },
-      ],
+        quantity: 1,
+      }],
       mode: "payment",
       success_url: `${process.env.FRONTEND_URL}/?success=true&summoner=${encodeURIComponent(summonerName)}`,
       cancel_url: `${process.env.FRONTEND_URL}/`,
       metadata: { summonerName, region },
     });
-
     res.json({ url: session.url });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Stripe error" });
+    res.status(500).json({ error: "Checkout error" });
   }
 });
 
-// Health check
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
 const PORT = process.env.PORT || 3001;
