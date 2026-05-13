@@ -5,12 +5,12 @@ import Stripe from "stripe";
 import dotenv from "dotenv";
 
 dotenv.config();
-process.env.RIOT_API_KEY = "RGAPI-24baeed0-0b47-4df2-8837-d748aae28249";
+
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-process.env.ANTHROPIC_API_KEY = "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";
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ─── Riot API helpers ────────────────────────────────────────────────────────
